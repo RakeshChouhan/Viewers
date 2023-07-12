@@ -130,7 +130,7 @@ const OHIFCornerstoneViewport = React.memo(props => {
   const [{ isCineEnabled, cines }, cineService] = useCine();
   const [{ activeViewportIndex }] = useViewportGrid();
   const [enabledVPElement, setEnabledVPElement] = useState(null);
-
+  const [dataRendered, setDataRendered] = useState('false');
   const elementRef = useRef();
 
   const {
@@ -146,6 +146,15 @@ const OHIFCornerstoneViewport = React.memo(props => {
   } = servicesManager.services as CornerstoneServices;
 
   const [viewportDialogState] = useViewportDialog();
+
+  const imageRenderedEventHandler = props => {
+    const viewport = cornerstoneViewportService.getCornerstoneViewportByIndex(
+      viewportIndex
+    );
+    if (viewport?.csImage) {
+      setDataRendered('true');
+    }
+  };
 
   const cineHandler = () => {
     if (!cines || !cines[viewportIndex] || !enabledVPElement) {
@@ -216,13 +225,26 @@ const OHIFCornerstoneViewport = React.memo(props => {
 
   // useCallback for scroll bar height calculation
   const setImageScrollBarHeight = useCallback(() => {
-    const scrollbarHeight = `${elementRef.current.clientHeight - 20}px`;
+    // works for multiframe and non multiframe
+    const numImages = displaySets[0].numImageFrames;
+    let scrollbarHeight;
+    if (numImages <= 2) {
+      scrollbarHeight = `${elementRef.current.clientHeight / 2 - 20}px`;
+    } else if (numImages <= 100) {
+      scrollbarHeight = `${elementRef.current.clientHeight / 2 +
+        ((numImages - 2) / (100 - 2)) * (elementRef.current.clientHeight / 2) -
+        20}px`;
+    } else {
+      scrollbarHeight = `${elementRef.current.clientHeight - 20}px`;
+    }
+
     setScrollbarHeight(scrollbarHeight);
-  }, [elementRef]);
+  }, [elementRef, displaySets]);
 
   // useCallback for onResize
   const onResize = useCallback(() => {
     if (elementRef.current) {
+      setDataRendered('resize');
       cornerstoneViewportService.resize();
       setImageScrollBarHeight();
     }
@@ -328,6 +350,11 @@ const OHIFCornerstoneViewport = React.memo(props => {
       Enums.Events.ELEMENT_ENABLED,
       elementEnabledHandler
     );
+    const elementToListen = elementRef.current;
+    elementToListen.addEventListener(
+      Enums.Events.IMAGE_RENDERED,
+      imageRenderedEventHandler
+    );
 
     setImageScrollBarHeight();
 
@@ -349,6 +376,10 @@ const OHIFCornerstoneViewport = React.memo(props => {
       eventTarget.removeEventListener(
         Enums.Events.ELEMENT_ENABLED,
         elementEnabledHandler
+      );
+      elementToListen.removeEventListener(
+        Enums.Events.IMAGE_RENDERED,
+        imageRenderedEventHandler
       );
     };
   }, []);
@@ -435,12 +466,13 @@ const OHIFCornerstoneViewport = React.memo(props => {
         displaySetOptions,
         presentations
       );
-
+      if (dataRendered !== 'true') setDataRendered('load');
       if (measurement) {
         cs3DTools.annotation.selection.setAnnotationSelected(measurement.uid);
       }
     };
 
+    setDataRendered('false');
     loadViewportData();
   }, [viewportOptions, displaySets, dataSource]);
 
@@ -486,13 +518,11 @@ const OHIFCornerstoneViewport = React.memo(props => {
 
   return (
     <React.Fragment>
-      <div className="viewport-wrapper">
+      <div className="viewport-wrapper" data-rendered={dataRendered}>
         <ReactResizeDetector
-          handleWidth
-          handleHeight
-          skipOnMount={true} // Todo: make these configurable
-          refreshMode={'debounce'}
-          refreshRate={200} // transition amount in side panel
+          skipOnMount={true}
+          refreshMode="throttle"
+          refreshRate={100} // transition amount in side panel
           onResize={onResize}
           targetRef={elementRef.current}
         />
@@ -655,11 +685,6 @@ function _jumpToMeasurement(
   viewportGridService.setActiveViewportIndex(viewportIndex);
 
   const enabledElement = getEnabledElement(targetElement);
-
-  const viewportInfo = cornerstoneViewportService.getViewportInfoByIndex(
-    viewportIndex
-  );
-
   if (enabledElement) {
     // See how the jumpToSlice() of Cornerstone3D deals with imageIdx param.
     const viewport = enabledElement.viewport as

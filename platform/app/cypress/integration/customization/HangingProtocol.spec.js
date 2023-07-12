@@ -11,6 +11,7 @@ describe('OHIF HP', () => {
 
   it('Should display 3 up', () => {
     beforeSetup();
+    cy.waitRendered(3);
 
     cy.get('[data-cy="viewport-pane"]')
       .its('length')
@@ -19,15 +20,16 @@ describe('OHIF HP', () => {
 
   it('Should navigate next/previous stage', () => {
     beforeSetup();
+    cy.waitRendered(3);
 
     cy.get('body').type(',');
-    cy.wait(250);
+    cy.waitRendered(3);
     cy.get('[data-cy="viewport-pane"]')
       .its('length')
       .should('be.eq', 4);
 
     cy.get('body').type('..');
-    cy.wait(250);
+    cy.waitRendered(2);
     cy.get('[data-cy="viewport-pane"]')
       .its('length')
       .should('be.eq', 2);

@@ -56,16 +56,16 @@ Cypress.Commands.add('openStudy', PatientName => {
 
 Cypress.Commands.add(
   'checkStudyRouteInViewer',
-  (StudyInstanceUID, otherParams = '') => {
+  (StudyInstanceUID, otherParams = '', mode = '/basic-test') => {
     cy.location('pathname').then($url => {
       cy.log($url);
       if (
         $url == 'blank' ||
-        !$url.includes(`/basic-test/${StudyInstanceUID}${otherParams}`)
+        !$url.includes(`${mode}/${StudyInstanceUID}${otherParams}`)
       ) {
-        cy.openStudyInViewer(StudyInstanceUID, otherParams);
-        cy.waitDicomImage();
-        cy.wait(2000);
+        cy.openStudyInViewer(StudyInstanceUID, otherParams, mode);
+        cy.waitDicomImage(mode);
+        cy.waitRendered();
       }
     });
   }
@@ -73,8 +73,8 @@ Cypress.Commands.add(
 
 Cypress.Commands.add(
   'openStudyInViewer',
-  (StudyInstanceUID, otherParams = '') => {
-    cy.visit(`/basic-test?StudyInstanceUIDs=${StudyInstanceUID}${otherParams}`);
+  (StudyInstanceUID, otherParams = '', mode = '/basic-test') => {
+    cy.visit(`${mode}?StudyInstanceUIDs=${StudyInstanceUID}${otherParams}`);
   }
 );
 
@@ -95,6 +95,12 @@ Cypress.Commands.add('openStudyModality', Modality => {
     .contains(Modality)
     .first()
     .click();
+});
+
+Cypress.Commands.add('waitRendered', (count = 1) => {
+  return cy.get('[data-rendered="true"]').should($el => {
+    expect($el.length).to.greaterThan(count - 1);
+  });
 });
 
 /**
@@ -198,55 +204,58 @@ Cypress.Commands.add('expectMinimumThumbnails', (seriesToWait = 1) => {
 });
 
 //Command to wait DICOM image to load into the viewport
-Cypress.Commands.add('waitDicomImage', (timeout = 50000) => {
-  const loaded = cy.isPageLoaded();
+Cypress.Commands.add(
+  'waitDicomImage',
+  (mode = '/basic-test', timeout = 50000) => {
+    const loaded = cy.isPageLoaded(mode);
 
-  if (loaded) {
-    cy.window()
-      .its('cornerstone')
-      .then({ timeout }, $cornerstone => {
-        return new Cypress.Promise(resolve => {
-          const onEvent = renderedEvt => {
-            const element = renderedEvt.detail.element;
+    if (loaded) {
+      cy.window()
+        .its('cornerstone')
+        .then({ timeout }, $cornerstone => {
+          return new Cypress.Promise(resolve => {
+            const onEvent = renderedEvt => {
+              const element = renderedEvt.detail.element;
 
-            element.removeEventListener(
-              $cornerstone.Enums.Events.IMAGE_RENDERED,
-              onEvent
-            );
-            $cornerstone.eventTarget.removeEventListener(
-              $cornerstone.Enums.Events.IMAGE_RENDERED,
-              onEvent
-            );
-            resolve();
-          };
-          const onEnabled = enabledEvt => {
-            const element = enabledEvt.detail.element;
+              element.removeEventListener(
+                $cornerstone.Enums.Events.IMAGE_RENDERED,
+                onEvent
+              );
+              $cornerstone.eventTarget.removeEventListener(
+                $cornerstone.Enums.Events.IMAGE_RENDERED,
+                onEvent
+              );
+              resolve();
+            };
+            const onEnabled = enabledEvt => {
+              const element = enabledEvt.detail.element;
 
-            element.addEventListener(
-              $cornerstone.Enums.Events.IMAGE_RENDERED,
-              onEvent
-            );
+              element.addEventListener(
+                $cornerstone.Enums.Events.IMAGE_RENDERED,
+                onEvent
+              );
 
-            $cornerstone.eventTarget.removeEventListener(
-              $cornerstone.Enums.Events.ELEMENT_ENABLED,
-              onEnabled
-            );
-          };
-          const enabledElements = $cornerstone.getEnabledElements();
-          if (enabledElements && enabledElements.length) {
-            // Sometimes the page finishes rendering before this gets run,
-            // if so, just resolve immediately.
-            resolve();
-          } else {
-            $cornerstone.eventTarget.addEventListener(
-              $cornerstone.Enums.Events.ELEMENT_ENABLED,
-              onEnabled
-            );
-          }
+              $cornerstone.eventTarget.removeEventListener(
+                $cornerstone.Enums.Events.ELEMENT_ENABLED,
+                onEnabled
+              );
+            };
+            const enabledElements = $cornerstone.getEnabledElements();
+            if (enabledElements && enabledElements.length) {
+              // Sometimes the page finishes rendering before this gets run,
+              // if so, just resolve immediately.
+              resolve();
+            } else {
+              $cornerstone.eventTarget.addEventListener(
+                $cornerstone.Enums.Events.ELEMENT_ENABLED,
+                onEnabled
+              );
+            }
+          });
         });
-      });
+    }
   }
-});
+);
 
 //Command to reset and clear all the changes made to the viewport
 Cypress.Commands.add('resetViewport', () => {
@@ -318,7 +327,9 @@ Cypress.Commands.add(
 Cypress.Commands.add(
   'addAngleMeasurement',
   (initPos = [180, 390], midPos = [300, 410], finalPos = [180, 450]) => {
+    cy.get('[data-cy="MeasurementTools-split-button-secondary"]').click();
     cy.get('[data-cy="Angle"]').click();
+
     cy.addAngle('.viewport-element', initPos, midPos, finalPos);
   }
 );
@@ -401,7 +412,7 @@ Cypress.Commands.add('setLayout', (columns = 1, rows = 1) => {
     .eq(columns - 1)
     .click();
 
-  cy.wait(1000);
+  cy.waitRendered();
 });
 
 function convertCanvas(documentClone) {
