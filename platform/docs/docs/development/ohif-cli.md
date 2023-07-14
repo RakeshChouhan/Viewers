@@ -55,7 +55,7 @@ Commands:
   create-mode                            Create a new template Mode
   add-extension <packageName> [version]  Adds an ohif extension
   remove-extension <packageName>         removes an ohif extension
-  add-mode <packageName> [version]       Removes an ohif mode
+  add-mode <packageName> [version]       adds an ohif mode
   remove-mode <packageName>              Removes an ohif mode
   link-extension <packageDir>            Links a local OHIF extension to the Viewer to be used for development
   unlink-extension <extensionName>       Unlinks a local OHIF extension from the Viewer
